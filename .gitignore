@@ -1,0 +1,24 @@
+# Mac OS specific
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.env
+
+# Environment Variables (Security)
+.env
+
+# Logs
+logs/
+*.log
+
+# Docker
+docker-compose.override.yml
+
+# dbt
+dbt_project/dbt_packages/
+dbt_project/target/
