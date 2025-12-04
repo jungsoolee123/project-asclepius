@@ -1,14 +1,13 @@
 x-airflow-common: &airflow-common
-  # Use the shared image built from Dockerfile
   image: project-asclepius-airflow:latest
-  build:                    
+  build:
     context: .
     dockerfile: Dockerfile
   env_file:
     - .env
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
     - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
     - AIRFLOW__CORE__LOAD_EXAMPLES=false
     - AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK=true
@@ -24,16 +23,6 @@ x-airflow-common: &airflow-common
       condition: service_healthy
 
 services:
-  # Custom Airflow Image Builder (빌드만 담당)
-  airflow-image:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: project-asclepius-airflow:latest
-    command: ["true"]  # 빌드만 하고 종료
-    profiles:
-      - donotstart  # 자동 실행 방지
-
   # 1. Metadata Database (PostgreSQL)
   postgres:
     image: postgres:13
@@ -50,24 +39,57 @@ services:
       retries: 5
     restart: always
 
-  # 2. Airflow Initialization
+  # 2. Airflow Initialization (with retry logic)
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
+    environment:
+      # Force PostgreSQL connection (override any defaults)
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
     command:
       - -c
       - |
+        # Display connection string for debugging
+        echo "============================================"
+        echo "Database Connection Check"
+        echo "============================================"
+        echo "SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}"
+        
+        # Wait for database to be truly ready
+        echo "Waiting for database..."
+        for i in {1..30}; do
+          if airflow db check 2>/dev/null; then
+            echo "Database is ready!"
+            break
+          fi
+          echo "Database not ready yet... attempt $i/30"
+          sleep 2
+        done
+        
+        # Create directories
+        echo "Creating directories..."
         mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+        
+        # Initialize database
+        echo "Running database migration..."
         airflow db migrate
+        
+        # Create admin user
+        echo "Creating admin user..."
         airflow users create \
           --username "${AIRFLOW_WWW_USER_USERNAME:-admin}" \
           --password "${AIRFLOW_WWW_USER_PASSWORD:-admin}" \
           --firstname Admin \
           --lastname User \
           --role Admin \
-          --email admin@example.com
-    environment:
-      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+          --email admin@example.com || true
+        
+        echo "============================================"
+        echo "Initialization complete!"
+        echo "============================================"
+    restart: "no"
 
   # 3. Airflow Webserver
   airflow-webserver:
@@ -80,9 +102,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     restart: always
     depends_on:
+      postgres:
+        condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
 
@@ -95,9 +119,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     restart: always
     depends_on:
+      postgres:
+        condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
 
