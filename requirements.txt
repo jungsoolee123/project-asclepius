@@ -1,0 +1,15 @@
+# Airflow Providers (Let pip resolve the compatible versions)
+apache-airflow-providers-snowflake
+apache-airflow-providers-http
+
+# Snowflake Connectivity (Python 3.11 supported)
+snowflake-connector-python>=3.6.0
+snowflake-sqlalchemy>=1.5.0
+
+# dbt (Upgrade to 1.7+ for Python 3.11 support)
+dbt-core>=1.7.0
+dbt-snowflake>=1.7.0
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.26.0
