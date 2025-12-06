@@ -13,3 +13,6 @@ dbt-snowflake>=1.7.0
 # Data Processing
 pandas>=2.1.0
 numpy>=1.26.0
+
+# PostgreSQL Adapter
+psycopg2-binary>=2.9.0
